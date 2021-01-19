@@ -13,6 +13,7 @@ import (
 )
 
 const (
+	logDir             = "logs"
 	minThreadCount     = 1
 	defaultThreadCount = 2
 )
@@ -60,6 +61,11 @@ func main() {
 		t = minThreadCount
 	}
 
+	// Clear the Log folder.
+	if err := os.RemoveAll(logDir); err != nil {
+		panic(err)
+	}
+
 	// The accounts we have to transfer.
 	jobs := make(chan job, t)
 
@@ -95,22 +101,27 @@ func syncMailboxWorker(wg *sync.WaitGroup, jobs <-chan job /* todo - We need a c
 
 		cmd := exec.Command(
 			"imapsync",
-			fmt.Sprintf("--host1 '%s'", j.source.host),
-			fmt.Sprintf("--user1 '%s'", j.source.user),
-			fmt.Sprintf("--password1 '%s'", j.source.password),
-			fmt.Sprintf("--host2 '%s'", j.target.host),
-			fmt.Sprintf("--user2 '%s'", j.target.user),
-			fmt.Sprintf("--password2 '%s'", j.target.password),
-			fmt.Sprintf("--logdir '%s'", j.logDir()),
-			fmt.Sprintf("--logfile '%s'", j.logFile()),
+			"--host1", j.source.host,
+			"--user1", j.source.user,
+			"--password1", j.source.password,
+			"--host2", j.target.host,
+			"--user2", j.target.user,
+			"--password2", j.target.password,
+			"--logdir", logDir,
+			"--logfile", j.logFile(),
 		)
 		if err := cmd.Run(); err != nil {
-			p, err2 := filepath.Abs(filepath.Join(j.logDir(), j.logFile()))
+			p, err2 := filepath.Abs(logDir)
 			if err2 != nil {
 				panic(err2)
 			}
 
-			f, err2 := os.OpenFile(p, os.O_WRONLY|os.O_APPEND, 0666)
+			if err2 := os.MkdirAll(p, 0755); err2 != nil {
+				panic(err2)
+			}
+			p = filepath.Join(p, j.logFile())
+
+			f, err2 := os.OpenFile(p, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
 			if err2 != nil {
 				panic(err2)
 			}
@@ -119,9 +130,9 @@ func syncMailboxWorker(wg *sync.WaitGroup, jobs <-chan job /* todo - We need a c
 			f.WriteString("\n\nAn error occured:\n")
 			f.WriteString(err.Error())
 
-			fmt.Printf("%s %s\n\tLogs can be seen in %s\n", red("ERROR"), cyan(j.source.user), filepath.Join(j.logDir(), j.logFile()))
+			fmt.Printf("%s %s\n\tLogs can be seen in %s\n", red("ERROR"), cyan(j.source.user), filepath.Join(logDir, j.logFile()))
 		} else {
-			fmt.Printf("%s %s\n\tLogs can be seen in %s\n", green("FINISHED"), cyan(j.source.user), filepath.Join(j.logDir(), j.logFile()))
+			fmt.Printf("%s %s\n\tLogs can be seen in %s\n", green("FINISHED"), cyan(j.source.user), filepath.Join(logDir, j.logFile()))
 		}
 
 		wg.Done()
@@ -143,10 +154,6 @@ func jobFromString(s string) job { // todo - add error
 			password: d[5],
 		},
 	}
-}
-
-func (j job) logDir() string {
-	return "logs"
 }
 
 func (j job) logFile() string {
