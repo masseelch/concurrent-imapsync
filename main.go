@@ -74,7 +74,7 @@ func main() {
 
 	// Start the workers.
 	for w := 1; w <= t; w++ {
-		go syncMailboxWorker(wg, jobs)
+		go syncMailboxWorker(w, wg, jobs)
 	}
 
 	// Read in the account data.
@@ -91,11 +91,12 @@ func main() {
 	}
 
 	wg.Wait()
-
 	close(jobs)
+
+	color.Green("\nDONE")
 }
 
-func syncMailboxWorker(wg *sync.WaitGroup, jobs <-chan job /* todo - We need a channel for errors and logs here. */) {
+func syncMailboxWorker(id int, wg *sync.WaitGroup, jobs <-chan job /* todo - We need a channel for errors and logs here. */) {
 	for j := range jobs {
 		fmt.Println("Started", cyan(j.source.user))
 
@@ -109,6 +110,7 @@ func syncMailboxWorker(wg *sync.WaitGroup, jobs <-chan job /* todo - We need a c
 			"--password2", j.target.password,
 			"--logdir", logDir,
 			"--logfile", j.logFile(),
+			"--pidfile", fmt.Sprintf("/tmp/imapsync_%d.pid", id),
 		)
 		if err := cmd.Run(); err != nil {
 			p, err2 := filepath.Abs(logDir)
@@ -130,9 +132,9 @@ func syncMailboxWorker(wg *sync.WaitGroup, jobs <-chan job /* todo - We need a c
 			f.WriteString("\n\nAn error occured:\n")
 			f.WriteString(err.Error())
 
-			fmt.Printf("%s %s\n\tLogs can be seen in %s\n", red("ERROR"), cyan(j.source.user), filepath.Join(logDir, j.logFile()))
+			fmt.Printf("%s %s\n", red("ERROR"), cyan(j.source.user))
 		} else {
-			fmt.Printf("%s %s\n\tLogs can be seen in %s\n", green("FINISHED"), cyan(j.source.user), filepath.Join(logDir, j.logFile()))
+			fmt.Printf("%s %s\n", green("FINISHED"), cyan(j.source.user))
 		}
 
 		wg.Done()
